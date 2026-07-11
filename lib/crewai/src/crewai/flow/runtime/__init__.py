@@ -2629,6 +2629,17 @@ class Flow(BaseModel, Generic[T], metaclass=FlowMeta):
                 if future:
                     self._event_futures.append(future)
 
+            from crewai.hooks.contexts import StepContext
+            from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+            pre_step_ctx = StepContext(
+                kind="flow_method",
+                step_name=str(method_name),
+                flow=self,
+                payload=dumped_params,
+            )
+            dispatch(InterceptionPoint.PRE_STEP, pre_step_ctx)
+
             # Set method name in context so ask() can read it without
             # stack inspection.  Must happen before copy_context() so the
             # value propagates into the thread pool for sync methods.
@@ -2655,6 +2666,16 @@ class Flow(BaseModel, Generic[T], metaclass=FlowMeta):
                 result = await self._run_human_feedback_step(
                     method_name, method_definition.human_feedback, result
                 )
+
+            post_step_ctx = StepContext(
+                kind="flow_method",
+                step_name=str(method_name),
+                flow=self,
+                output=result,
+                payload=result,
+            )
+            dispatch(InterceptionPoint.POST_STEP, post_step_ctx)
+            result = post_step_ctx.payload
 
             self._method_outputs.append({"method": str(method_name), "output": result})
 
@@ -2852,6 +2873,19 @@ class Flow(BaseModel, Generic[T], metaclass=FlowMeta):
                     if isinstance(router_result, enum.Enum)
                     else router_result
                 )
+
+                from crewai.hooks.contexts import RouterDecisionContext
+                from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+                router_ctx = RouterDecisionContext(
+                    flow=self,
+                    router_name=str(router_name),
+                    route=router_result,
+                    payload=router_result,
+                )
+                dispatch(InterceptionPoint.ROUTER_DECISION, router_ctx)
+                router_result = router_ctx.payload
+
                 router_result_str = str(router_result)
                 router_result_event = FlowMethodName(router_result_str)
                 router_results.append(router_result_event)
@@ -2880,6 +2914,19 @@ class Flow(BaseModel, Generic[T], metaclass=FlowMeta):
                     current_trigger, router_only=False
                 )
                 if listeners_triggered:
+                    from crewai.hooks.contexts import FlowTransitionContext
+                    from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+                    transition_ctx = FlowTransitionContext(
+                        flow=self,
+                        from_method=str(trigger_method),
+                        to_methods=[str(name) for name in listeners_triggered],
+                        trigger=str(current_trigger),
+                        payload=listeners_triggered,
+                    )
+                    dispatch(InterceptionPoint.FLOW_TRANSITION, transition_ctx)
+                    listeners_triggered = transition_ctx.payload
+
                     listener_result = router_result_payloads.get(
                         str(current_trigger), result
                     )

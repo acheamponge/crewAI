@@ -224,6 +224,18 @@ class ScriptAction:
 
     def run(self, *args: Any, **kwargs: Any) -> Any:
         local_context = _pop_local_context(kwargs)
+
+        from crewai.hooks.contexts import PreCodeExecutionContext
+        from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+        code_ctx = PreCodeExecutionContext(
+            flow=self.flow,
+            code=self.definition.code,
+            language="python",
+            payload=self.definition.code,
+        )
+        dispatch(InterceptionPoint.PRE_CODE_EXECUTION, code_ctx)
+
         return self.handler(
             state=self.flow.state,
             outputs=outputs_by_name(

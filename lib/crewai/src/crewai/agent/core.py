@@ -656,6 +656,22 @@ class Agent(BaseAgent):
 
         return result
 
+    def _dispatch_retry_attempt(self, e: Exception, task: Task) -> None:
+        """Fire the ``retry_attempt`` interception point before re-executing a task."""
+        from crewai.hooks.contexts import RetryAttemptContext
+        from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+        retry_ctx = RetryAttemptContext(
+            agent=self,
+            agent_role=getattr(self, "role", None),
+            task=task,
+            attempt=self._times_executed,
+            max_attempts=self.max_retry_limit,
+            error=e,
+            payload=e,
+        )
+        dispatch(InterceptionPoint.RETRY_ATTEMPT, retry_ctx)
+
     def _check_execution_error(self, e: Exception, task: Task) -> None:
         """Check if an execution error should be re-raised immediately.
 
@@ -709,6 +725,7 @@ class Agent(BaseAgent):
             Result from retried execution.
         """
         self._check_execution_error(e, task)
+        self._dispatch_retry_attempt(e, task)
         return self.execute_task(task, context, tools)
 
     async def _handle_execution_error_async(
@@ -730,6 +747,7 @@ class Agent(BaseAgent):
             Result from retried execution.
         """
         self._check_execution_error(e, task)
+        self._dispatch_retry_attempt(e, task)
         return await self.aexecute_task(task, context, tools)
 
     def message(self, content: str, **kwargs: Any) -> str:
@@ -1054,6 +1072,21 @@ class Agent(BaseAgent):
             An instance of the CrewAgentExecutor class.
         """
         raw_tools: list[BaseTool] = tools or self.tools or []
+
+        from crewai.hooks.contexts import ToolSelectionContext
+        from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+        selection_ctx = ToolSelectionContext(
+            agent=self,
+            agent_role=getattr(self, "role", None),
+            task=task,
+            crew=self.crew,
+            tools=raw_tools,
+            payload=raw_tools,
+        )
+        dispatch(InterceptionPoint.TOOL_SELECTION, selection_ctx)
+        raw_tools = selection_ctx.payload
+
         parsed_tools = parse_tools(raw_tools)
 
         prompt, stop_words, rpm_limit_fn = self._build_execution_prompt(raw_tools)

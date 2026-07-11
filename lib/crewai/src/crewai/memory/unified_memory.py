@@ -466,6 +466,18 @@ class Memory(BaseModel):
         if self.read_only:
             return None
 
+        from crewai.hooks.contexts import MemoryWriteContext
+        from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+        write_ctx = MemoryWriteContext(
+            agent_role=agent_role,
+            memory_type="unified_memory",
+            metadata=metadata or {},
+            payload=content,
+        )
+        dispatch(InterceptionPoint.MEMORY_WRITE, write_ctx)
+        content = write_ctx.payload
+
         # Determine effective root_scope: per-call override takes precedence
         effective_root = root_scope if root_scope is not None else self.root_scope
 
@@ -560,6 +572,18 @@ class Memory(BaseModel):
         """
         if not contents or self.read_only:
             return []
+
+        from crewai.hooks.contexts import MemoryWriteContext
+        from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+        write_ctx = MemoryWriteContext(
+            agent_role=agent_role,
+            memory_type="unified_memory",
+            metadata=metadata or {},
+            payload=contents,
+        )
+        dispatch(InterceptionPoint.MEMORY_WRITE, write_ctx)
+        contents = write_ctx.payload
 
         # Determine effective root_scope: per-call override takes precedence
         effective_root = root_scope if root_scope is not None else self.root_scope
@@ -711,6 +735,17 @@ class Memory(BaseModel):
         # Read barrier: wait for any pending background saves to finish
         # so that the search sees all persisted records.
         self.drain_writes()
+
+        from crewai.hooks.contexts import MemoryReadContext
+        from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+        read_ctx = MemoryReadContext(
+            memory_type="unified_memory",
+            query=query,
+            payload=query,
+        )
+        dispatch(InterceptionPoint.MEMORY_READ, read_ctx)
+        query = read_ctx.payload
 
         effective_scope = scope
         if effective_scope is None and self.root_scope:

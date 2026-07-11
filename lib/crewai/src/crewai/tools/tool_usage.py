@@ -879,6 +879,22 @@ class ToolUsage:
                 return ToolUsageError(
                     f"{I18N_DEFAULT.errors('tool_usage_error').format(error=e)}\nMoving on then. {I18N_DEFAULT.slice('format').format(tool_names=self.tools_names)}"
                 )
+
+            from crewai.hooks.contexts import RetryAttemptContext
+            from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+            retry_ctx = RetryAttemptContext(
+                agent=self.agent,
+                agent_role=getattr(self.agent, "role", None),
+                task=self.task,
+                attempt=self._run_attempts,
+                max_attempts=self._max_parsing_attempts,
+                error=e,
+                payload=tool_string,
+            )
+            dispatch(InterceptionPoint.RETRY_ATTEMPT, retry_ctx)
+            tool_string = retry_ctx.payload
+
             return self._tool_calling(tool_string)
 
     def _validate_tool_input(self, tool_input: str | None) -> dict[str, Any]:

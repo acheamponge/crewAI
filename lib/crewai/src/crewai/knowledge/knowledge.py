@@ -145,6 +145,13 @@ class Knowledge(BaseModel):
         if self.storage is None:
             raise ValueError("Storage is not initialized.")
 
+        from crewai.hooks.contexts import KnowledgeRetrievalContext
+        from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+        retrieval_ctx = KnowledgeRetrievalContext(query=query, payload=query)
+        dispatch(InterceptionPoint.KNOWLEDGE_RETRIEVAL, retrieval_ctx)
+        query = retrieval_ctx.payload
+
         return self.storage.search(
             query,
             limit=results_limit,
@@ -182,6 +189,13 @@ class Knowledge(BaseModel):
         """
         if self.storage is None:
             raise ValueError("Storage is not initialized.")
+
+        from crewai.hooks.contexts import KnowledgeRetrievalContext
+        from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+        retrieval_ctx = KnowledgeRetrievalContext(query=query, payload=query)
+        dispatch(InterceptionPoint.KNOWLEDGE_RETRIEVAL, retrieval_ctx)
+        query = retrieval_ctx.payload
 
         return await self.storage.asearch(
             query,

@@ -152,6 +152,16 @@ class MCPClient:
         server_name, server_url, transport_type = self._get_server_info()
         is_reconnect = self._was_connected
 
+        from crewai.hooks.contexts import MCPConnectContext
+        from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+        connect_ctx = MCPConnectContext(
+            server_name=server_name,
+            server_params=self.transport,
+            payload=self.transport,
+        )
+        dispatch(InterceptionPoint.MCP_CONNECT, connect_ctx)
+
         started_at = datetime.now()
         crewai_event_bus.emit(
             self,

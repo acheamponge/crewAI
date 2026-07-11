@@ -375,7 +375,8 @@
                       "edge/en/learn/using-annotations",
                       "edge/en/learn/execution-hooks",
                       "edge/en/learn/llm-hooks",
-                      "edge/en/learn/tool-hooks"
+                      "edge/en/learn/tool-hooks",
+                      "edge/en/learn/interception-hooks"
                     ]
                   },
                   {

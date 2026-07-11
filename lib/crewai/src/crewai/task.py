@@ -662,6 +662,21 @@ class Task(BaseModel):
                 crewai_event_bus.emit(
                     self, TaskStartedEvent(context=context, task=self)
                 )
+
+            from crewai.hooks.contexts import StepContext
+            from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+            pre_step_ctx = StepContext(
+                kind="task",
+                step_name=self.name or self.description,
+                agent=agent,
+                agent_role=getattr(agent, "role", None),
+                task=self,
+                payload=context,
+            )
+            dispatch(InterceptionPoint.PRE_STEP, pre_step_ctx)
+            context = pre_step_ctx.payload
+
             result = await agent.aexecute_task(
                 task=self,
                 context=context,
@@ -717,6 +732,18 @@ class Task(BaseModel):
                     tools=tools,
                     guardrail=self._guardrail,
                 )
+
+            post_step_ctx = StepContext(
+                kind="task",
+                step_name=self.name or self.description,
+                agent=agent,
+                agent_role=getattr(agent, "role", None),
+                task=self,
+                output=task_output,
+                payload=task_output,
+            )
+            dispatch(InterceptionPoint.POST_STEP, post_step_ctx)
+            task_output = post_step_ctx.payload
 
             self.output = task_output
             self.end_time = datetime.datetime.now()
@@ -787,6 +814,21 @@ class Task(BaseModel):
                 crewai_event_bus.emit(
                     self, TaskStartedEvent(context=context, task=self)
                 )
+
+            from crewai.hooks.contexts import StepContext
+            from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+            pre_step_ctx = StepContext(
+                kind="task",
+                step_name=self.name or self.description,
+                agent=agent,
+                agent_role=getattr(agent, "role", None),
+                task=self,
+                payload=context,
+            )
+            dispatch(InterceptionPoint.PRE_STEP, pre_step_ctx)
+            context = pre_step_ctx.payload
+
             result = agent.execute_task(
                 task=self,
                 context=context,
@@ -843,6 +885,18 @@ class Task(BaseModel):
                     guardrail=self._guardrail,
                 )
 
+            post_step_ctx = StepContext(
+                kind="task",
+                step_name=self.name or self.description,
+                agent=agent,
+                agent_role=getattr(agent, "role", None),
+                task=self,
+                output=task_output,
+                payload=task_output,
+            )
+            dispatch(InterceptionPoint.POST_STEP, post_step_ctx)
+            task_output = post_step_ctx.payload
+
             self.output = task_output
             self.end_time = datetime.datetime.now()
 
@@ -883,6 +937,32 @@ class Task(BaseModel):
         finally:
             clear_task_files(self.id)
             reset_current_task_id(task_id_token)
+
+    def _dispatch_guardrail_retry_attempt(
+        self,
+        agent: BaseAgent | None,
+        context: str | None,
+        attempt: int,
+        error: Any,
+    ) -> str | None:
+        """Fire ``retry_attempt`` before re-executing a task after a guardrail failure.
+
+        Returns the (possibly hook-modified) retry context.
+        """
+        from crewai.hooks.contexts import RetryAttemptContext
+        from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+        retry_ctx = RetryAttemptContext(
+            agent=agent,
+            agent_role=getattr(agent, "role", None),
+            task=self,
+            attempt=attempt,
+            max_attempts=self.guardrail_max_retries,
+            error=error,
+            payload=context,
+        )
+        dispatch(InterceptionPoint.RETRY_ATTEMPT, retry_ctx)
+        return retry_ctx.payload
 
     def _post_agent_execution(self, agent: BaseAgent) -> None:
         pass
@@ -1317,6 +1397,13 @@ Follow these guidelines:
                     color="yellow",
                 )
 
+            context = self._dispatch_guardrail_retry_attempt(
+                agent=agent,
+                context=context,
+                attempt=current_retry_count,
+                error=guardrail_result.error,
+            )
+
             result = agent.execute_task(
                 task=self,
                 context=context,
@@ -1426,6 +1513,13 @@ Follow these guidelines:
                     content=f"Guardrail {guardrail_index if guardrail_index is not None else ''} blocked (attempt {attempt + 1}/{max_attempts}), retrying due to: {guardrail_result.error}\n",
                     color="yellow",
                 )
+
+            context = self._dispatch_guardrail_retry_attempt(
+                agent=agent,
+                context=context,
+                attempt=current_retry_count,
+                error=guardrail_result.error,
+            )
 
             result = await agent.aexecute_task(
                 task=self,
