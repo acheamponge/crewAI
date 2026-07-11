@@ -236,7 +236,22 @@ class ScriptAction:
         )
         dispatch(InterceptionPoint.PRE_CODE_EXECUTION, code_ctx)
 
-        return self.handler(
+        # Honor a hook that rewrites the code, via either a returned payload
+        # replacement or an in-place ``ctx.code`` edit. Recompile only when the
+        # source actually changed so the common no-hook path stays free.
+        effective_code = (
+            code_ctx.payload
+            if isinstance(code_ctx.payload, str)
+            and code_ctx.payload != self.definition.code
+            else code_ctx.code
+        )
+        handler = (
+            self.handler
+            if effective_code == self.definition.code
+            else self._compile_handler(effective_code)
+        )
+
+        return handler(
             state=self.flow.state,
             outputs=outputs_by_name(
                 self.flow._method_outputs,
@@ -246,7 +261,7 @@ class ScriptAction:
             item=local_context.get("item") if local_context else None,
         )
 
-    def _compile_handler(self) -> Callable[..., Any]:
+    def _compile_handler(self, code: str | None = None) -> Callable[..., Any]:
         raw = os.environ.get(_ALLOW_SCRIPT_EXECUTION_ENV_VAR, "")
         if raw.strip().lower() not in _TRUSTED_SCRIPT_EXECUTION_VALUES:
             raise FlowScriptExecutionDisabledError(
@@ -255,8 +270,9 @@ class ScriptAction:
                 "trusted flow definitions."
             )
 
+        source = code if code is not None else self.definition.code
         filename = f"crewai.flow.script.{self.flow._definition.name}"
-        module = ast.parse(self.definition.code, filename=filename)
+        module = ast.parse(source, filename=filename)
         function = ast.FunctionDef(
             name="_flow_script",
             args=ast.arguments(

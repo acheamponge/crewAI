@@ -1687,20 +1687,10 @@ class Crew(FlowTrackable, BaseModel):
             if files_needing_tool:
                 tools = self._add_file_tools(tools, files_needing_tool)
 
-        from crewai.hooks.contexts import ToolSelectionContext
-        from crewai.hooks.dispatch import InterceptionPoint, dispatch
-
-        selection_ctx = ToolSelectionContext(
-            agent=agent,
-            agent_role=getattr(agent, "role", None),
-            task=task,
-            crew=self,
-            tools=tools,
-            payload=tools,
-        )
-        dispatch(InterceptionPoint.TOOL_SELECTION, selection_ctx)
-
-        return selection_ctx.payload
+        # TOOL_SELECTION is dispatched once, in Agent.create_agent_executor,
+        # which every crew task funnels through. Dispatching here as well would
+        # fire the point twice on a crew run (and duplicate additive edits).
+        return tools
 
     def _get_agent_to_use(self, task: Task) -> BaseAgent | None:
         if self.process == Process.hierarchical:

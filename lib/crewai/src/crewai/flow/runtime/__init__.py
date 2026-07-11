@@ -2640,6 +2640,22 @@ class Flow(BaseModel, Generic[T], metaclass=FlowMeta):
             )
             dispatch(InterceptionPoint.PRE_STEP, pre_step_ctx)
 
+            # Apply hook edits/replacement of the step params back onto the
+            # call. ``dumped_params`` maps positional args to ``_0, _1, ...``
+            # keys and keeps kwargs by name, so reverse that mapping here.
+            updated_params = pre_step_ctx.payload
+            if isinstance(updated_params, dict):
+                positional = sorted(
+                    (k for k in updated_params if k.startswith("_") and k[1:].isdigit()),
+                    key=lambda k: int(k[1:]),
+                )
+                args = tuple(updated_params[k] for k in positional)
+                kwargs = {
+                    k: v
+                    for k, v in updated_params.items()
+                    if not (k.startswith("_") and k[1:].isdigit())
+                }
+
             # Set method name in context so ask() can read it without
             # stack inspection.  Must happen before copy_context() so the
             # value propagates into the thread pool for sync methods.

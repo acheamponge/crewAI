@@ -161,6 +161,10 @@ class MCPClient:
             payload=self.transport,
         )
         dispatch(InterceptionPoint.MCP_CONNECT, connect_ctx)
+        # Honor a hook that replaces the connection transport/params so the
+        # connection below actually uses the returned value.
+        if connect_ctx.payload is not None:
+            self.transport = connect_ctx.payload
 
         started_at = datetime.now()
         crewai_event_bus.emit(

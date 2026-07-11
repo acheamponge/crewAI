@@ -108,20 +108,23 @@ class BaseAgentTool(BaseTool):
             )
 
         selected_agent = agent[0]
+
+        from crewai.hooks.contexts import PreDelegationContext
+        from crewai.hooks.dispatch import InterceptionPoint, dispatch
+
+        # Dispatched outside the try/except below so a HookAborted propagates
+        # instead of being swallowed into a tool-error string.
+        delegation_ctx = PreDelegationContext(
+            agent=selected_agent,
+            agent_role=getattr(selected_agent, "role", None),
+            coworker=sanitized_name,
+            delegate_to=selected_agent,
+            payload=task,
+        )
+        dispatch(InterceptionPoint.PRE_DELEGATION, delegation_ctx)
+        task = delegation_ctx.payload
+
         try:
-            from crewai.hooks.contexts import PreDelegationContext
-            from crewai.hooks.dispatch import InterceptionPoint, dispatch
-
-            delegation_ctx = PreDelegationContext(
-                agent=selected_agent,
-                agent_role=getattr(selected_agent, "role", None),
-                coworker=sanitized_name,
-                delegate_to=selected_agent,
-                payload=task,
-            )
-            dispatch(InterceptionPoint.PRE_DELEGATION, delegation_ctx)
-            task = delegation_ctx.payload
-
             task_with_assigned_agent = Task(
                 description=task,
                 agent=selected_agent,
